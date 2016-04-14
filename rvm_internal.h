@@ -12,61 +12,103 @@ std::unordered_map<trans_t, RvmTransaction*> g_trans_list;
 static trans_t g_trans_id = 0;
 
 class RvmSegment {
-  friend class Rvm;
-  friend class RvmTransaction;
-
  public:
-  RvmSegment(std::string segname, std::string segpath, void* segbase, size_t segsize)
-          : name_(segname), path_(segpath), base_(segbase), size_(segsize), owned_by_(nullptr) {};
-  ~RvmSegment() {};
+  RvmSegment(Rvm* rvm, std::string segname, size_t segsize);
+  ~RvmSegment();
 
-  RvmTransaction* GetOwner() {
-    return owned_by_;
+  const std::string& get_name() const {
+    return name_;
   }
 
-  void SetOwner(RvmTransaction* owner) {
+  const std::string& get_path() const {
+    return path_;
+  }
+
+  char* get_base_ptr() {
+    return base_;
+  }
+
+  size_t get_size() const {
+    return size_;
+  }
+
+  void set_owner(RvmTransaction* owner) {
     owned_by_ = owner;
   }
 
-  bool HasOwner() {
+  bool has_owner() const {
     return owned_by_ != nullptr;
   }
 
  private:
+  Rvm* rvm_;
   std::string name_;
   std::string path_;
-  void* base_;
+  char* base_;
   size_t size_;
   RvmTransaction* owned_by_;
 };
 
-class Rvm {
+class UndoRecord {
  public:
-  Rvm(const char* directory) : directory_(directory) {};
-  ~Rvm() {};
+  UndoRecord(char* segbase, size_t offset, size_t size);
+  ~UndoRecord();
 
-  void* MapSegment(std::string segname, size_t size_to_create);
-  void UnmapSgement(void* segbase);
-  void DestroySegment(std::string segname);
-
-  trans_t BeginTransaction(int numsegs, void** segbases);
-  void TruncateLog();
- private:
-  std::string directory_;
-  std::unordered_map<std::string, RvmSegment*> name_to_segment_map_;
-  std::unordered_map<void*, RvmSegment*> base_to_segment_map_;
-
- private:
-  std::string construct_segment_path(std::string segname) {
-    return directory_ + "seg_" + segname;
+  size_t get_offset() const {
+    return offset_;
   }
+
+  size_t get_size() const {
+    return size_;
+  }
+
+  const char* get_segment_base_ptr() const {
+    return segbase_;
+  }
+
+ private:
+  char* segbase_;
+  size_t offset_;
+  size_t size_;
+  char* undo_copy_;
+};
+
+
+class RedoRecord {
+
+ public:
+  RedoRecord(std::string segname, size_t offset, size_t size);
+  RedoRecord(std::string segname, const UndoRecord* record);
+  ~RedoRecord();
+
+  const std::string& get_segment_name() const {
+    return segment_name_;
+  }
+
+  size_t get_offset() const {
+    return offset_;
+  }
+
+  size_t get_size() const {
+    return size_;
+  }
+
+  char* get_data_ptr() const {
+    return data_;
+  }
+
+ private:
+  std::string segment_name_;
+  size_t offset_;
+  size_t size_;
+  char* data_;
 };
 
 class RvmTransaction {
  public:
   RvmTransaction(trans_t tid, Rvm* rvm) : id_(tid), rvm_(rvm) {};
 
-  void AboutToModify(void* segbase, int offset, int size);
+  void AboutToModify(void* segbase, size_t offset, size_t size);
   void Commit();
   void Abort();
   void AddSegment(RvmSegment* segment);
@@ -75,11 +117,35 @@ class RvmTransaction {
   trans_t id_;
   Rvm* rvm_;
   std::unordered_map<void*, RvmSegment*> base_to_segment_map_;
+  std::vector<UndoRecord*> undo_records_;
 };
 
+class Rvm {
+ public:
+  Rvm(const char* directory);
+  ~Rvm();
 
+  void* MapSegment(std::string segname, size_t segsize);
+  void UnmapSegment(void* segbase);
+  void DestroySegment(std::string segname);
+  trans_t BeginTransaction(int numsegs, void** segbases);
+  void TruncateLog();
+  void ApplyRedoLog(RvmSegment* segment);
 
+  inline std::string construct_segment_path(std::string segname) {
+    return directory_ + "seg_" + segname + ".rvm";
+  }
 
+ private:
+  std::string directory_;
+  std::string log_path_;
+  std::unordered_map<std::string, RvmSegment*> name_to_segment_map_;
+  std::unordered_map<void*, RvmSegment*> base_to_segment_map_;
+  std::vector<RedoRecord*> committed_logs_;
 
+  inline std::string construct_log_path() {
+    return directory_ + "redo_log.rvm";
+  }
+};
 
 #endif // RVM_INTERNAL_H
