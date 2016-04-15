@@ -2,7 +2,13 @@
 #define RVM_INTERNAL_H
 
 #include <vector>
+#include <list>
 #include <unordered_map>
+
+#define DEBUG 1
+#if !DEBUG
+  #define NDEBUG
+#endif
 
 class Rvm;
 typedef Rvm* rvm_t;
@@ -51,9 +57,10 @@ class RvmSegment {
 
 class UndoRecord {
  public:
-  UndoRecord(char* segbase, size_t offset, size_t size);
+  UndoRecord(RvmSegment* segment, size_t offset, size_t size);
   ~UndoRecord();
 
+  void Rollback();
   size_t get_offset() const {
     return offset_;
   }
@@ -63,11 +70,15 @@ class UndoRecord {
   }
 
   const char* get_segment_base_ptr() const {
-    return segbase_;
+    return segment_->get_base_ptr();
+  }
+
+  const std::string& get_segment_name() const {
+    return segment_->get_name();
   }
 
  private:
-  char* segbase_;
+  RvmSegment* segment_;
   size_t offset_;
   size_t size_;
   char* undo_copy_;
@@ -78,7 +89,7 @@ class RedoRecord {
 
  public:
   RedoRecord(std::string segname, size_t offset, size_t size);
-  RedoRecord(std::string segname, const UndoRecord* record);
+  RedoRecord(const UndoRecord* record);
   ~RedoRecord();
 
   const std::string& get_segment_name() const {
@@ -117,7 +128,7 @@ class RvmTransaction {
   trans_t id_;
   Rvm* rvm_;
   std::unordered_map<void*, RvmSegment*> base_to_segment_map_;
-  std::vector<UndoRecord*> undo_records_;
+  std::list<UndoRecord*> undo_records_;
 };
 
 class Rvm {
@@ -131,7 +142,6 @@ class Rvm {
   trans_t BeginTransaction(int numsegs, void** segbases);
   void TruncateLog();
   void ApplyRedoLog(RvmSegment* segment);
-
   inline std::string construct_segment_path(std::string segname) {
     return directory_ + "seg_" + segname + ".rvm";
   }

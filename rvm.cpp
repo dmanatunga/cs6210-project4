@@ -1,19 +1,24 @@
 #include "rvm.h"
-#include <stdio.h>
+#include <iostream>
 #include <fstream>
 #include <cstring>
+#include <cassert>
 
 ///////////////////////////////////////////////////////////////////////////////
 // UndoRecord functions
 ///////////////////////////////////////////////////////////////////////////////
-UndoRecord::UndoRecord(char* segbase, size_t offset, size_t size)
-        : segbase_(segbase), offset_(offset), size_(size) {
+UndoRecord::UndoRecord(RvmSegment* segment, size_t offset, size_t size)
+        : segment_(segment), offset_(offset), size_(size) {
   undo_copy_ = new char[size];
-  memcpy(undo_copy_, &segbase_[offset_], size_ * sizeof(char));
+  memcpy(undo_copy_, &(segment_->get_base_ptr()[offset_]), size_ * sizeof(char));
 }
 
 UndoRecord::~UndoRecord() {
   delete[] undo_copy_;
+}
+
+void UndoRecord::Rollback() {
+  memcpy(&(segment_->get_base_ptr()[offset_]), undo_copy_,  size_ * sizeof(char));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -24,8 +29,8 @@ RedoRecord::RedoRecord(std::string segname, size_t offset, size_t size)
   data_ = new char[size_];
 }
 
-RedoRecord::RedoRecord(std::string segname, const UndoRecord* record)
-        : segment_name_(segname) {
+RedoRecord::RedoRecord(const UndoRecord* record)
+        : segment_name_(record->get_segment_name()) {
   size_ = record->get_size();
   offset_ = record->get_offset();
   data_ = new char[size_];
@@ -80,19 +85,23 @@ void RvmTransaction::AboutToModify(void* segbase, size_t offset, size_t size) {
     return;
   }
 
-  UndoRecord* undo_record = new UndoRecord(segment->get_base_ptr(), offset, size);
+  UndoRecord* undo_record = new UndoRecord(segment, offset, size);
   undo_records_.push_back(undo_record);
 }
 
 void RvmTransaction::Commit() {
+  std::list<RedoRecord*> redo_commits_;
   for (UndoRecord* record : undo_records_) {
-
+    redo_commits_.push_back(new RedoRecord(record));
   }
 }
 
 void RvmTransaction::Abort() {
-  for (UndoRecord* record : undo_records_) {
-
+  while (!undo_records_.empty()) {
+    UndoRecord* record = undo_records_.back();
+    record->Rollback();
+    undo_records_.pop_back();
+    delete record;
   }
 }
 
@@ -133,7 +142,7 @@ void* Rvm::MapSegment(std::string segname, size_t segsize) {
   } else {
     // Trying to re-map a segment that has already been mapped
 #if DEBUG
-    std::cout << "Rvm::MapSegment(): Segment " <<< segname << " already mapped." << std::endl;
+    std::cout << "Rvm::MapSegment(): Segment " << segname << " already mapped." << std::endl;
 #endif
     return (void*) -1;
   }
@@ -145,9 +154,7 @@ void Rvm::UnmapSegment(void* segbase) {
   if (iterator != base_to_segment_map_.end()) {
     RvmSegment* rvm_segment = iterator->second;
 
-#if DEBUG
-    assert(segbase == rvm_segment->base_);
-#endif
+    assert(segbase == rvm_segment->get_base_ptr());
 
     // Erase the segment from the mapping structures
     base_to_segment_map_.erase(iterator);
@@ -175,7 +182,7 @@ void Rvm::DestroySegment(std::string segname) {
     // TODO: Handle destroying any data in redo log
   } else {
 #if DEBUG
-    std::cout << "Rvm::DestroySegment(): Segment " <<< segname << " already mapped." << std::endl;
+    std::cout << "Rvm::DestroySegment(): Segment " << segname << " already mapped." << std::endl;
 #endif
     // Trying to destroy a segment that is currently mapped
     return;
@@ -192,7 +199,7 @@ trans_t Rvm::BeginTransaction(int numsegs, void** segbases) {
       // Check if segment is already owned by another transaction
       if (rvm_segment->has_owner()) {
 #if DEBUG
-        std::cerr << "Rvm::BeginTransaction(): Segment " << rvm_segment->name_ << " being modified by another transaction" << std::endl;
+        std::cerr << "Rvm::BeginTransaction(): Segment " << rvm_segment->get_name() << " being modified by another transaction" << std::endl;
 #endif
         return (trans_t)-1;
       }
