@@ -2,6 +2,7 @@
 #define __LIBRVM__
 
 #ifdef __cplusplus
+extern "C" {
 class Rvm;
 #else
 typedef struct Rvm Rvm;
@@ -19,5 +20,9 @@ void rvm_about_to_modify(trans_t tid, void *segbase, int offset, int size);
 void rvm_commit_trans(trans_t tid);
 void rvm_abort_trans(trans_t tid);
 void rvm_truncate_log(rvm_t rvm);
+
+#ifdef __cplusplus
+} // extern C
+#endif
 
 #endif
