@@ -1,24 +1,32 @@
 #### RVM Library Makefile
 
-CFLAGS  = -Wall -g -I. -std=c++11
+CFLAGS  = -Wall -g -I. -std=c++11 -fPIC
 LFLAGS  =
 CC      = g++
 RM      = /bin/rm -rf
 AR      = ar rc
 RANLIB  = ranlib
 
-LIBRARY = librvm.a
+STATIC_LIBRARY = librvm.a
+SHARED_LIBRARY = librvm.so
 
 LIB_SRC = rvm.cpp
 
 LIB_OBJ = $(patsubst %.cpp,%.o,$(LIB_SRC))
 
-%.o: %.cpp
+all: $(STATIC_LIBRARY) $(SHARED_LIBRARY)
+
+.PHONY: all
+
+%.o: %.cpp rvm.h
 	$(CC) -c $(CFLAGS) $< -o $@
 
-$(LIBRARY): $(LIB_OBJ)
-	$(AR) $(LIBRARY) $(LIB_OBJ)
-	$(RANLIB) $(LIBRARY)
+$(STATIC_LIBRARY): $(LIB_OBJ)
+	$(AR) $(STATIC_LIBRARY) $(LIB_OBJ)
+	$(RANLIB) $(STATIC_LIBRARY)
+
+$(SHARED_LIBRARY): $(LIB_OBJ)
+	$(CC) -shared -o $(SHARED_LIBRARY) $(LIB_OBJ)
 
 clean:
-	$(RM) $(LIBRARY) $(LIB_OBJ)
+	$(RM) $(STATIC_LIBRARY) $(SHARED_LIBRARY) $(LIB_OBJ)
