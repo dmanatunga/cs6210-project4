@@ -1,7 +1,14 @@
 #ifndef __LIBRVM__
 #define __LIBRVM__
 
-#include "rvm_internal.h"
+#ifdef __cplusplus
+class Rvm;
+#else
+typedef struct Rvm Rvm;
+#endif /* __cplusplus */
+
+typedef Rvm* rvm_t;
+typedef int trans_t;
 
 rvm_t rvm_init(const char *directory);
 void *rvm_map(rvm_t rvm, const char *segname, int size_to_create);

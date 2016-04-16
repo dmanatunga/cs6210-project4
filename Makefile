@@ -1,6 +1,6 @@
 #### RVM Library Makefile
 
-CFLAGS  = -Wall -g -I.
+CFLAGS  = -Wall -g -I. -std=c++11
 LFLAGS  =
 CC      = g++
 RM      = /bin/rm -rf

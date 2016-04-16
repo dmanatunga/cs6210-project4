@@ -1,4 +1,5 @@
 #include "rvm.h"
+#include "rvm_internal.h"
 #include <iostream>
 #include <fstream>
 #include <cstring>

@@ -10,9 +10,7 @@
   #define NDEBUG
 #endif
 
-class Rvm;
-typedef Rvm* rvm_t;
-typedef int trans_t;
+class RvmTransaction;
 
 std::unordered_map<trans_t, RvmTransaction*> g_trans_list;
 static trans_t g_trans_id = 0;
