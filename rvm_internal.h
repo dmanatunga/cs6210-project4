@@ -4,11 +4,13 @@
 #include <vector>
 #include <list>
 #include <unordered_map>
+#include <sys/stat.h>
 
 #define DEBUG 1
 #if !DEBUG
   #define NDEBUG
 #endif
+
 
 class RvmTransaction;
 
@@ -34,6 +36,10 @@ class RvmSegment {
 
   size_t get_size() const {
     return size_;
+  }
+
+  RvmTransaction* get_owner() const {
+    return owned_by_;
   }
 
   void set_owner(RvmTransaction* owner) {
@@ -84,11 +90,21 @@ class UndoRecord {
 
 
 class RedoRecord {
-
  public:
+  enum RecordType {
+    REDO_RECORD = 1,
+    DESTROY_SEGMENT = 2
+  };
+
   RedoRecord(std::string segname, size_t offset, size_t size);
   RedoRecord(const UndoRecord* record);
+  RedoRecord(RecordType type, std::string segname);
+
   ~RedoRecord();
+
+  RecordType get_type() const {
+    return type_;
+  }
 
   const std::string& get_segment_name() const {
     return segment_name_;
@@ -107,6 +123,7 @@ class RedoRecord {
   }
 
  private:
+  RecordType type_;
   std::string segment_name_;
   size_t offset_;
   size_t size_;
@@ -121,6 +138,7 @@ class RvmTransaction {
   void Commit();
   void Abort();
   void AddSegment(RvmSegment* segment);
+  void RemoveSegments();
 
  private:
   trans_t id_;
@@ -139,7 +157,10 @@ class Rvm {
   void DestroySegment(std::string segname);
   trans_t BeginTransaction(int numsegs, void** segbases);
   void TruncateLog();
-  void ApplyRedoLog(RvmSegment* segment);
+  std::list<RedoRecord*> GetRedoRecordsForSegment(RvmSegment* segment);
+  void WriteRecordsToLog(std::list<RedoRecord*> records);
+  void WriteRecordToLog(RedoRecord* record);
+
   inline std::string construct_segment_path(std::string segname) {
     return directory_ + "seg_" + segname + ".rvm";
   }
@@ -152,8 +173,16 @@ class Rvm {
   std::vector<RedoRecord*> committed_logs_;
 
   inline std::string construct_log_path() {
-    return directory_ + "redo_log.rvm";
+    return directory_ + "/" + "redo_log.rvm";
   }
+
+  inline bool file_exists(const std::string& name) {
+    struct stat buffer;
+    return (stat (name.c_str(), &buffer) == 0);
+  }
+
+  RedoRecord* ParseRedoRecord(std::ifstream& log_file);
+
 };
 
 #endif // RVM_INTERNAL_H

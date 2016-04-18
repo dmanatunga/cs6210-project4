@@ -27,20 +27,32 @@ void UndoRecord::Rollback() {
 ///////////////////////////////////////////////////////////////////////////////
 RedoRecord::RedoRecord(std::string segname, size_t offset, size_t size)
         : segment_name_(segname), offset_(offset), size_(size) {
+  type_ = REDO_RECORD;
   data_ = new char[size_];
 }
 
 RedoRecord::RedoRecord(const UndoRecord* record)
         : segment_name_(record->get_segment_name()) {
+  type_ = REDO_RECORD;
   size_ = record->get_size();
   offset_ = record->get_offset();
   data_ = new char[size_];
-  memcpy(data_, record->get_segment_base_ptr(), size_);
+  memcpy(data_, record->get_segment_base_ptr() + record->get_offset(), size_);
+}
+
+RedoRecord::RedoRecord(RecordType type, std::string segname)
+        : type_(type), segment_name_(segname) {
+  type_ = type;
+  size_ = 0;
+  offset_ = 0;
+  data_ = 0;
 }
 
 RedoRecord::~RedoRecord() {
-  delete[] data_;
+  if (data_ != nullptr)
+    delete[] data_;
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // RvmSegment functions
@@ -58,8 +70,24 @@ RvmSegment::RvmSegment(Rvm* rvm, std::string segname, size_t segsize)
     backing_file.read(base_, segsize);
   }
 
-  // TODO: Apply any changes stored in the redo log
-  rvm->ApplyRedoLog(this);
+  // Apply any changes stored in the redo log
+  std::list<RedoRecord*> redo_records = rvm->GetRedoRecordsForSegment(this);
+  // Go through redo records from oldest to newest
+  // and apply redo records
+  for (RedoRecord* record : redo_records) {
+    size_t offset = record->get_offset();
+    size_t copy_size = record->get_size();
+
+    if ((offset + copy_size) <= size_) {
+      // If redo record end occurs before end of segment
+      memcpy(base_ + offset, record->get_data_ptr(), copy_size);
+    } else if (offset < size_) {
+      // If redo record end occurs after end of segment,
+      // but redo record offset occurs before end of segment
+      memcpy(base_ + offset, record->get_data_ptr(), size_ - offset);
+    }
+
+  }
 }
 
 RvmSegment::~RvmSegment() {
@@ -91,10 +119,13 @@ void RvmTransaction::AboutToModify(void* segbase, size_t offset, size_t size) {
 }
 
 void RvmTransaction::Commit() {
-  std::list<RedoRecord*> redo_commits_;
+  std::list<RedoRecord*> redo_commits;
   for (UndoRecord* record : undo_records_) {
-    redo_commits_.push_back(new RedoRecord(record));
+    redo_commits.push_back(new RedoRecord(record));
   }
+
+  rvm_->WriteRecordsToLog(redo_commits);
+  RemoveSegments();
 }
 
 void RvmTransaction::Abort() {
@@ -104,11 +135,21 @@ void RvmTransaction::Abort() {
     undo_records_.pop_back();
     delete record;
   }
+  RemoveSegments();
 }
 
 void RvmTransaction::AddSegment(RvmSegment* segment) {
   base_to_segment_map_[segment->get_base_ptr()] = segment;
   segment->set_owner(this);
+
+}
+
+void RvmTransaction::RemoveSegments() {
+  for (auto const entry : base_to_segment_map_) {
+    RvmSegment* segment = entry.second;
+    assert(segment->get_owner() == this);
+    segment->set_owner(nullptr);
+  }
 }
 
 
@@ -116,18 +157,30 @@ void RvmTransaction::AddSegment(RvmSegment* segment) {
 // Rvm class functions
 ///////////////////////////////////////////////////////////////////////////////
 Rvm::Rvm(const char* directory) : directory_(directory) {
+  struct stat st;
+  if (stat(directory_.c_str(), &st) == -1) {
+    mkdir(directory_.c_str(), 0700);
+  }
+
+
   // Map the segment from the disk
   log_path_ = construct_log_path();
-  std::ifstream log_file(log_path_, std::ifstream::binary);
+  if (file_exists(log_path_)) {
+    std::ifstream log_file(log_path_, std::ifstream::binary);
 
-  if (log_file.good()) {
-    // TODO: Redo-log file exists, so read it in
+    while (log_file.good()) {
+      RedoRecord* record = ParseRedoRecord(log_file);
+      if (record != nullptr) {
+        committed_logs_.push_back(record);
+      }
+    }
   }
 }
 
 Rvm::~Rvm() {
 
 }
+
 
 void* Rvm::MapSegment(std::string segname, size_t segsize) {
   // Search for a segment with the given name
@@ -174,11 +227,16 @@ void Rvm::DestroySegment(std::string segname) {
   // Search for a segment with the given name
   std::unordered_map<std::string, RvmSegment*>::iterator segment = name_to_segment_map_.find(segname);
   if (segment == name_to_segment_map_.end()) {
+    RedoRecord* record = new RedoRecord(RedoRecord::DESTROY_SEGMENT, segname);
+    WriteRecordToLog(record);
+
     std::string segpath = construct_segment_path(segname);
-    if (remove(segpath.c_str()) != 0) {
+    if (file_exists(segpath)) {
+      if (remove(segpath.c_str()) != 0) {
 #if DEBUG
-      perror("Rvm::DestroySegment(): Error deleting file");
+        std::cerr << "Rvm::DestroySegment(): Error deleting file" << std::endl;
 #endif
+      }
     }
     // TODO: Handle destroying any data in redo log
   } else {
@@ -227,24 +285,161 @@ void Rvm::TruncateLog() {
 
 }
 
-void Rvm::ApplyRedoLog(RvmSegment* segment) {
-  // Go through redo records from oldest to newest
-  // and apply redo records
+void Rvm::WriteRecordsToLog(std::list<RedoRecord*> records) {
+  std::ofstream log_file(log_path_, std::ofstream::out | std::ostream::binary | std::ostream::app);
+
+  for (RedoRecord* record : records) {
+
+    char type = record->get_type();
+    switch (type) {
+      case RedoRecord::REDO_RECORD: {
+        // RedoRecord Format
+        // <1-byte>: type
+        // <size_t-bytes = N> : Length of segment name
+        // <N-bytes> : Characters making up segment
+        // <size_t-bytes> : Offset
+        // <size_t-bytes = M> : Size of data
+        // <M-bytes> : Characters making up data
+        log_file.write(&type, 1);
+        size_t str_len = record->get_segment_name().length();
+        log_file.write((char*)&str_len, sizeof(size_t)); // Write length of string
+        log_file.write(record->get_segment_name().c_str(), str_len); // Write string data
+
+        // Write offset
+        size_t offset = record->get_offset();
+        log_file.write((char*)&offset, sizeof(size_t));
+
+        // Write size and data
+        size_t size = record->get_size();
+        log_file.write((char*)&size, sizeof(size_t));
+        log_file.write(record->get_data_ptr(), size);
+        break;
+      }
+      case RedoRecord::DESTROY_SEGMENT: {
+        log_file.write(&type, 1);
+        size_t str_len = record->get_segment_name().length();
+        log_file.write((char*)&str_len, sizeof(size_t)); // Write length of string
+        log_file.write(record->get_segment_name().c_str(), str_len); // Write string data
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  log_file.flush();
+}
+
+void Rvm::WriteRecordToLog(RedoRecord* record) {
+  std::ofstream log_file(log_path_, std::ofstream::out | std::ostream::binary | std::ostream::app);
+
+  char type = record->get_type();
+  switch (type) {
+    case RedoRecord::REDO_RECORD: {
+      // RedoRecord Format
+      // <1-byte>: type
+      // <size_t-bytes = N> : Length of segment name
+      // <N-bytes> : Characters making up segment
+      // <size_t-bytes> : Offset
+      // <size_t-bytes = M> : Size of data
+      // <M-bytes> : Characters making up data
+      log_file.write(&type, 1);
+      size_t str_len = record->get_segment_name().length();
+      log_file.write((char*)&str_len, sizeof(size_t)); // Write length of string
+      log_file.write(record->get_segment_name().c_str(), str_len); // Write string data
+
+      // Write offset
+      size_t offset = record->get_offset();
+      log_file.write((char*)&offset, sizeof(size_t));
+
+      // Write size and data
+      size_t size = record->get_size();
+      log_file.write((char*)&size, sizeof(size_t));
+      log_file.write(record->get_data_ptr(), size);
+      break;
+    }
+    case RedoRecord::DESTROY_SEGMENT: {
+      log_file.write(&type, 1);
+      size_t str_len = record->get_segment_name().length();
+      log_file.write((char*)&str_len, sizeof(size_t)); // Write length of string
+      log_file.write(record->get_segment_name().c_str(), str_len); // Write string data
+      break;
+    }
+    default:
+      break;
+  }
+
+  committed_logs_.push_back(record);
+  log_file.flush();
+}
+
+RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
+  // RedoRecord Format
+  // <size_t-bytes = N> : Length of segment name
+  // <N-bytes> : Characters making up segment
+  // <size_t-bytes> : Offset
+  // <size_t-bytes = M> : Size of data
+  // <M-bytes> : Characters making up data
+
+  // Redo-log file exists, so read it in
+  char type;
+  log_file.read(&type, 1);
+
+  switch (type) {
+    case RedoRecord::REDO_RECORD: {
+      char len_buf[sizeof(size_t)]; // Buffer to hold name length, offset, and size
+
+      // Read Name length
+      log_file.read(len_buf, sizeof(size_t));
+      size_t name_len = *((size_t*)len_buf);
+
+      // Read name
+      char* name_buf = new char[name_len + 1]; // +1 so that last byte will be string null-terminator
+      log_file.read(name_buf, sizeof(char) * name_len);
+
+      // Read offset
+      log_file.read(len_buf, sizeof(size_t));
+      size_t offset = *((size_t*)len_buf);
+
+      // Read size
+      log_file.read(len_buf, sizeof(size_t));
+      size_t size = *((size_t*)len_buf);
+
+      RedoRecord* record = new RedoRecord(std::string(name_buf), offset, size);
+      log_file.read(record->get_data_ptr(), size);
+
+      return record;
+    }
+    case RedoRecord::DESTROY_SEGMENT: {
+      char len_buf[sizeof(size_t)]; // Buffer to hold name length, offset, and size
+
+      // Read Name length
+      log_file.read(len_buf, sizeof(size_t));
+      size_t name_len = *((size_t*)len_buf);
+
+      // Read name
+      char* name_buf = new char[name_len + 1]; // +1 so that last byte will be string null-terminator
+      log_file.read(name_buf, sizeof(char) * name_len);
+
+      RedoRecord* record = new RedoRecord(RedoRecord::DESTROY_SEGMENT, std::string(name_buf));
+      return record;
+    }
+    default:
+      return nullptr;
+  }
+}
+
+std::list<RedoRecord*> Rvm::GetRedoRecordsForSegment(RvmSegment* segment) {
+  std::list<RedoRecord*> list;
   for (RedoRecord* record : committed_logs_) {
     if (record->get_segment_name() == segment->get_name()) {
-      size_t offset = record->get_offset();
-      size_t copy_size = record->get_size();
-
-      if ((offset + copy_size) <= segment->get_size()) {
-        // If redo record end occurs before end of segment
-        memcpy(&segment->get_base_ptr()[offset], record->get_data_ptr(), copy_size);
-      } else if (offset < segment->get_size()) {
-        // If redo record end occurs after end of segment,
-        // but redo record offset occures before end of segment
-        memcpy(&segment->get_base_ptr()[offset], record->get_data_ptr(), segment->get_size() - offset);
+      if (record->get_type() == RedoRecord::RecordType::DESTROY_SEGMENT) {
+        list.clear();
+      } else {
+        list.push_back(record);
       }
     }
   }
+  return list;
 }
 
 
@@ -261,10 +456,21 @@ rvm_t rvm_init(const char* directory) {
 }
 
 void* rvm_map(rvm_t rvm, const char* segname, int size_to_create) {
-  if (size_to_create <= 0) {
+  std::string name(segname);
+  if (name.empty()) {
+#if DEBUG
+    std::cout << "rvm_map(): Invalid segment name" << std::endl;
+#endif
     return (void*) -1;
   }
-  return rvm->MapSegment(std::string(segname), (size_t) size_to_create);
+
+  if (size_to_create <= 0) {
+#if DEBUG
+    std::cout << "rvmp_map(): Invalid size to create" << std::endl;
+#endif
+    return (void*) -1;
+  }
+  return rvm->MapSegment(name, (size_t) size_to_create);
 }
 
 void rvm_unmap(rvm_t rvm, void* segbase) {
@@ -310,6 +516,10 @@ void rvm_commit_trans(trans_t tid) {
   if (iter != g_trans_list.end()) {
     RvmTransaction* rvm_trans = iter->second;
     rvm_trans->Commit();
+
+    // Remove transaction from list and delete
+    g_trans_list.erase(iter);
+    delete rvm_trans;
   } else {
 #if DEBUG
     std::cerr << "rvm_commit_trans(): Invalid Transaction " << tid << std::endl;
@@ -322,6 +532,10 @@ void rvm_abort_trans(trans_t tid) {
   if (iter != g_trans_list.end()) {
     RvmTransaction* rvm_trans = iter->second;
     rvm_trans->Abort();
+
+    // Remove transaction from list and delete
+    g_trans_list.erase(iter);
+    delete rvm_trans;
   } else {
 #if DEBUG
     std::cerr << "rvm_abort_trans(): Invalid Transaction " << tid << std::endl;

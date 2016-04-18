@@ -19,14 +19,14 @@ all: $(STATIC_LIBRARY) $(SHARED_LIBRARY)
 .PHONY: all
 
 %.o: %.cpp rvm.h
-	$(CC) -c $(CFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $(LFLAGS) $< -o $@
 
 $(STATIC_LIBRARY): $(LIB_OBJ)
 	$(AR) $(STATIC_LIBRARY) $(LIB_OBJ)
 	$(RANLIB) $(STATIC_LIBRARY)
 
 $(SHARED_LIBRARY): $(LIB_OBJ)
-	$(CC) -shared -o $(SHARED_LIBRARY) $(LIB_OBJ)
+	$(CC) -shared -o $(SHARED_LIBRARY) $(LFLAGS) $(LIB_OBJ)
 
 clean:
 	$(RM) $(STATIC_LIBRARY) $(SHARED_LIBRARY) $(LIB_OBJ)
