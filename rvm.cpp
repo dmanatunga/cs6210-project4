@@ -314,7 +314,7 @@ void Rvm::TruncateLog() {
   for (auto& pair : commit_map) {
     ApplyRecordsToBackingFile(pair.first, pair.second);
     // Delete the record that has been applied to the backing file
-    delete pair.second;
+    pair.second.clear();
   }
 
   // Write the unbacked logs to temporary log file
@@ -594,6 +594,7 @@ void rvm_about_to_modify(trans_t tid, void* segbase, int offset, int size) {
 #if DEBUG
     std::cerr << "rvm_about_to_modify(): Invalid Transaction " << tid << std::endl;
 #endif
+    exit(1);
   }
 }
 
