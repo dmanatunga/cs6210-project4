@@ -111,7 +111,7 @@ void RvmTransaction::AboutToModify(void* segbase, size_t offset, size_t size) {
 #if DEBUG
     std::cerr << "RvmTransaction::AboutToModify(): offset and size outside of segment region" << std::endl;
 #endif
-    return;
+    exit(1);
   }
 
   UndoRecord* undo_record = new UndoRecord(segment, offset, size);
@@ -142,7 +142,6 @@ void RvmTransaction::Abort() {
 void RvmTransaction::AddSegment(RvmSegment* segment) {
   base_to_segment_map_[segment->get_base_ptr()] = segment;
   segment->set_owner(this);
-
 }
 
 void RvmTransaction::RemoveSegments() {
