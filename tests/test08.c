@@ -15,11 +15,12 @@
 void proc1() {
   rvm_t rvm;
   trans_t trans = 0;
-  char *segs1[2], *segs2[1] = { 0 };
+  char *segs1[2], *segs2[1];
 
   rvm = rvm_init("rvm_segments");
   rvm_destroy(rvm, "testseg");
   segs1[0] = (char*) rvm_map(rvm, "testseg", 10000);
+  segs2[0] = (char*) rvm_map(rvm, "testseg02", 10000);
 
   trans = rvm_begin_trans(rvm, 1, (void**) segs1);
 
