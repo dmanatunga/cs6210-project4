@@ -37,29 +37,6 @@ void proc1() {
   abort();
 }
 
-
-/* proc2 opens the segments and reads from them */
-void proc2() {
-  char* segs[1];
-  rvm_t rvm;
-
-  rvm = rvm_init("rvm_segments");
-
-  segs[0] = (char*) rvm_map(rvm, "testseg", 10000);
-  if (strcmp(segs[0], TEST_STRING)) {
-    printf("ERROR: first hello not present\n");
-    exit(2);
-  }
-  if (strcmp(segs[0] + OFFSET2, TEST_STRING)) {
-    printf("ERROR: second hello not present\n");
-    exit(2);
-  }
-
-  printf("OK\n");
-  exit(0);
-}
-
-
 int main(int argc, char** argv) {
   int pid;
 
@@ -74,8 +51,6 @@ int main(int argc, char** argv) {
   }
 
   waitpid(pid, NULL, 0);
-
-  proc2();
 
   return 0;
 }
