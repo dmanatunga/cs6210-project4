@@ -159,7 +159,10 @@ void RvmTransaction::RemoveSegments() {
 Rvm::Rvm(const char* directory) : directory_(directory) {
   struct stat st;
   if (stat(directory_.c_str(), &st) == -1) {
-    mkdir(directory_.c_str(), 0700);
+    if (mkdir(directory_.c_str(), 0700) != 0) {
+      std::cerr << "ERROR: Cannot create directory" << directory << std::endl;
+      return;
+    }
   }
 
 
