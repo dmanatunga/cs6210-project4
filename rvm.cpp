@@ -103,7 +103,7 @@ void RvmTransaction::AboutToModify(void* segbase, size_t offset, size_t size) {
 #if DEBUG
     std::cerr << "RvmTransaction::AboutToModify(): Invalid Segment Base" << std::endl;
 #endif
-    return;
+    exit(1);
   }
 
   RvmSegment* segment = iterator->second;
