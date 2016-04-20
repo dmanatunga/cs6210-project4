@@ -628,6 +628,7 @@ void rvm_abort_trans(trans_t tid) {
 #if DEBUG
     std::cerr << "rvm_abort_trans(): Invalid Transaction " << tid << std::endl;
 #endif
+    exit(1);
   }
 }
 
