@@ -511,6 +511,7 @@ void rvm_about_to_modify(trans_t tid, void* segbase, int offset, int size) {
 #if DEBUG
     std::cerr << "rvm_about_to_modify(): Invalid Transaction " << tid << std::endl;
 #endif
+    exit(1);
   }
 }
 

@@ -7,7 +7,7 @@ CC = gcc
 CFLAGS = -ggdb -Wall $(DEBUG) -I$(IDIR) -std=gnu11
 LDFLAGS = -lrvm -L../
 
-EXEC = abort basic multi-abort multi truncate test01 test02 test03 test04 test05
+EXEC = abort basic multi-abort multi truncate test01 test02 test03 test04 test05 test06
 
 all: $(EXEC)
 

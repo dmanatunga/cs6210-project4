@@ -8,14 +8,15 @@
 /* proc1 writes some data, commits it, then exits */
 void proc1() {
   rvm_t rvm;
-  char* segs[1];
+  char* segs[1] = { 0 };
 
   rvm = rvm_init("rvm_segments");
-  rvm_destroy(rvm, "testseg01");
-  segs[0] = (char*) rvm_map(rvm, "testseg01", 10000);
+  rvm_destroy(rvm, "testseg02");
+  segs[0] = (char*) rvm_map(rvm, "testseg02", 10000);
+  segs[0] = (char*) rvm_map(rvm, "testseg02", 10000);
 
   // this should fail
-  if(rvm_map(rvm, "testseg01", 10000) != -1)
+  if(segs[0] != (char *)-1)
     fprintf(stderr, "Should return -1\n");
   else
     fprintf(stderr, "Pass\n");
@@ -28,13 +29,13 @@ void proc2() {
   char* segs[1];
 
   rvm = rvm_init("rvm_segments");
-  rvm_destroy(rvm, "testseg01");
-  segs[0] = (char*) rvm_map(rvm, "testseg01", 10000);
+  rvm_destroy(rvm, "testseg02");
+  segs[0] = (char*) rvm_map(rvm, "testseg02", 10000);
 
   rvm_unmap(rvm, segs[0]);
 
   // this should not fail
-  rvm_destroy(rvm, "testseg01");
+  rvm_destroy(rvm, "testseg02");
 
   return;
 }
