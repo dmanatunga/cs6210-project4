@@ -158,22 +158,34 @@ class Rvm {
   trans_t BeginTransaction(int numsegs, void** segbases);
   void TruncateLog();
   std::list<RedoRecord*> GetRedoRecordsForSegment(RvmSegment* segment);
-  void WriteRecordsToLog(std::list<RedoRecord*> records);
-  void WriteRecordToLog(RedoRecord* record);
+  void WriteRecordsToLog(const std::string& path, const std::list<RedoRecord*>& records, bool overwrite);
+  void WriteRecordToLog(const std::string& path, const RedoRecord* record, bool overwrite);
+  void ApplyRecordsToBackingFile(const std::string& segname, const std::list<RedoRecord*>& records);
 
   inline std::string construct_segment_path(std::string segname) {
-    return directory_ + "seg_" + segname + ".rvm";
+    return directory_ + "/" + "seg_" + segname + ".rvm";
   }
+
+  const std::string& get_log_path() const {
+    return log_path_;
+  }
+
+  void CommitRecords(const std::list<RedoRecord*>& records);
 
  private:
   std::string directory_;
   std::string log_path_;
+  std::string tmp_log_path_;
   std::unordered_map<std::string, RvmSegment*> name_to_segment_map_;
   std::unordered_map<void*, RvmSegment*> base_to_segment_map_;
-  std::vector<RedoRecord*> committed_logs_;
+  std::list<RedoRecord*> committed_logs_;
 
   inline std::string construct_log_path() {
     return directory_ + "/" + "redo_log.rvm";
+  }
+
+  inline std::string construct_tmp_path(std::string path) {
+    return path + ".tmp";
   }
 
   inline bool file_exists(const std::string& name) {

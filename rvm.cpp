@@ -10,7 +10,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 UndoRecord::UndoRecord(RvmSegment* segment, size_t offset, size_t size)
         : segment_(segment), offset_(offset), size_(size) {
-  undo_copy_ = new char[size];
+  undo_copy_ = new char[size]();
   memcpy(undo_copy_, &(segment_->get_base_ptr()[offset_]), size_ * sizeof(char));
 }
 
@@ -28,7 +28,7 @@ void UndoRecord::Rollback() {
 RedoRecord::RedoRecord(std::string segname, size_t offset, size_t size)
         : segment_name_(segname), offset_(offset), size_(size) {
   type_ = REDO_RECORD;
-  data_ = new char[size_];
+  data_ = new char[size_]();
 }
 
 RedoRecord::RedoRecord(const UndoRecord* record)
@@ -36,7 +36,7 @@ RedoRecord::RedoRecord(const UndoRecord* record)
   type_ = REDO_RECORD;
   size_ = record->get_size();
   offset_ = record->get_offset();
-  data_ = new char[size_];
+  data_ = new char[size_]();
   memcpy(data_, record->get_segment_base_ptr() + record->get_offset(), size_);
 }
 
@@ -60,7 +60,7 @@ RedoRecord::~RedoRecord() {
 RvmSegment::RvmSegment(Rvm* rvm, std::string segname, size_t segsize)
         : rvm_(rvm), name_(segname), size_(segsize), owned_by_(nullptr) {
   path_ = rvm_->construct_segment_path(segname);
-  base_ = new char[size_];
+  base_ = new char[size_]();
 
   // Map the segment from the disk
   std::ifstream backing_file(path_, std::ifstream::binary);
@@ -124,7 +124,8 @@ void RvmTransaction::Commit() {
     redo_commits.push_back(new RedoRecord(record));
   }
 
-  rvm_->WriteRecordsToLog(redo_commits);
+  rvm_->CommitRecords(redo_commits);
+  rvm_->WriteRecordsToLog(rvm_->get_log_path(), redo_commits, false);
   RemoveSegments();
 }
 
@@ -159,15 +160,24 @@ void RvmTransaction::RemoveSegments() {
 Rvm::Rvm(const char* directory) : directory_(directory) {
   struct stat st;
   if (stat(directory_.c_str(), &st) == -1) {
+
     mkdir(directory_.c_str(), 0700);
   }
 
-
   // Map the segment from the disk
   log_path_ = construct_log_path();
+  tmp_log_path_ = construct_tmp_path(log_path_);
+
+
+  if (!file_exists(log_path_) && file_exists(tmp_log_path_)) {
+    // If log file doesn't exist, but tmp log file does, then move
+    // tmp file over to log file
+    std::rename(tmp_log_path_.c_str(), log_path_.c_str());
+  }
+
   if (file_exists(log_path_)) {
     std::ifstream log_file(log_path_, std::ifstream::binary);
-
+    // Parse log file
     while (log_file.good()) {
       RedoRecord* record = ParseRedoRecord(log_file);
       if (record != nullptr) {
@@ -227,18 +237,20 @@ void Rvm::DestroySegment(std::string segname) {
   // Search for a segment with the given name
   std::unordered_map<std::string, RvmSegment*>::iterator segment = name_to_segment_map_.find(segname);
   if (segment == name_to_segment_map_.end()) {
+    // Write to redo log that the segment was destroyed
     RedoRecord* record = new RedoRecord(RedoRecord::DESTROY_SEGMENT, segname);
-    WriteRecordToLog(record);
+    WriteRecordToLog(log_path_, record, false);
+    committed_logs_.push_back(record);
 
     std::string segpath = construct_segment_path(segname);
     if (file_exists(segpath)) {
+      // Delete the file if it exists
       if (remove(segpath.c_str()) != 0) {
 #if DEBUG
         std::cerr << "Rvm::DestroySegment(): Error deleting file" << std::endl;
 #endif
       }
     }
-    // TODO: Handle destroying any data in redo log
   } else {
 #if DEBUG
     std::cout << "Rvm::DestroySegment(): Segment " << segname << " already mapped." << std::endl;
@@ -282,14 +294,52 @@ trans_t Rvm::BeginTransaction(int numsegs, void** segbases) {
 }
 
 void Rvm::TruncateLog() {
+  std::list<RedoRecord*> logs = committed_logs_;
+  std::list<RedoRecord*> unbacked_logs;
 
+  std::unordered_map<std::string, std::list<RedoRecord*>> commit_map;
+
+  // Loop through logs and separate based on which backing file
+  // the logs apply to
+  for (RedoRecord* record : logs) {
+    if (record->get_type() == RedoRecord::RecordType::DESTROY_SEGMENT) {
+      // If it is a delete record, then clear current list
+      commit_map[record->get_segment_name()].clear();
+    } else {
+      // Regular record, so push back to commit list
+      commit_map[record->get_segment_name()].push_back(record);
+    }
+  }
+
+  // Loop through map and commit logs to backing file
+  for (auto& pair : commit_map) {
+    ApplyRecordsToBackingFile(pair.first, pair.second);
+    // Delete the record that has been applied to the backing file
+    delete pair.second;
+  }
+
+  // Write the unbacked logs to temporary log file
+  WriteRecordsToLog(tmp_log_path_, unbacked_logs, true);
+
+  // Make the temporary log file as the new log file
+  std::remove(log_path_.c_str());
+  std::rename(tmp_log_path_.c_str(), log_path_.c_str());
+
+  // The list of committed logs should just be any logs
+  // that were not applied the backing store
+  committed_logs_ = unbacked_logs;
 }
 
-void Rvm::WriteRecordsToLog(std::list<RedoRecord*> records) {
-  std::ofstream log_file(log_path_, std::ofstream::out | std::ostream::binary | std::ostream::app);
+void Rvm::WriteRecordsToLog(const std::string& path, const std::list<RedoRecord*>& records, bool overwrite) {
+  std::ofstream::openmode flags = std::ofstream::out | std::ofstream::binary;
+  if (overwrite)
+    flags |= std::ofstream::trunc;
+  else
+    flags |= std::ofstream::app;
+
+  std::ofstream log_file(path, flags);
 
   for (RedoRecord* record : records) {
-
     char type = record->get_type();
     switch (type) {
       case RedoRecord::REDO_RECORD: {
@@ -329,8 +379,14 @@ void Rvm::WriteRecordsToLog(std::list<RedoRecord*> records) {
   log_file.flush();
 }
 
-void Rvm::WriteRecordToLog(RedoRecord* record) {
-  std::ofstream log_file(log_path_, std::ofstream::out | std::ostream::binary | std::ostream::app);
+void Rvm::WriteRecordToLog(const std::string& path, const RedoRecord* record, bool overwrite) {
+  std::ofstream::openmode flags = std::ofstream::out | std::ofstream::binary;
+  if (overwrite)
+    flags |= std::ofstream::trunc;
+  else
+    flags |= std::ofstream::app;
+
+  std::ofstream log_file(path, flags);
 
   char type = record->get_type();
   switch (type) {
@@ -367,8 +423,6 @@ void Rvm::WriteRecordToLog(RedoRecord* record) {
     default:
       break;
   }
-
-  committed_logs_.push_back(record);
   log_file.flush();
 }
 
@@ -394,6 +448,7 @@ RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
 
       // Read name
       char* name_buf = new char[name_len + 1]; // +1 so that last byte will be string null-terminator
+      name_buf[name_len] = 0;
       log_file.read(name_buf, sizeof(char) * name_len);
 
       // Read offset
@@ -417,7 +472,8 @@ RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
       size_t name_len = *((size_t*)len_buf);
 
       // Read name
-      char* name_buf = new char[name_len + 1]; // +1 so that last byte will be string null-terminator
+      char* name_buf = new char[name_len + 1](); // +1 so that last byte will be string null-terminator
+      name_buf[name_len] = 0;
       log_file.read(name_buf, sizeof(char) * name_len);
 
       RedoRecord* record = new RedoRecord(RedoRecord::DESTROY_SEGMENT, std::string(name_buf));
@@ -440,6 +496,37 @@ std::list<RedoRecord*> Rvm::GetRedoRecordsForSegment(RvmSegment* segment) {
     }
   }
   return list;
+}
+
+void Rvm::ApplyRecordsToBackingFile(const std::string& segname,
+        const std::list<RedoRecord*>& records) {
+
+  std::ofstream backing_file(construct_segment_path(segname), std::ofstream::out | std::ofstream::ate);
+
+  for (RedoRecord* record : records) {
+    backing_file.seekp(0, backing_file.end);
+    size_t file_size = (size_t)backing_file.tellp();
+    assert(record->get_type()  == RedoRecord::RecordType::REDO_RECORD);
+    if (file_size < record->get_offset()) {
+      // If the file is smaller than the offset, than pad the file
+      // with zeros till the offset
+      char* pad = new char[record->get_offset() - file_size]();
+      backing_file.write(pad, record->get_offset() - file_size);
+      delete[] pad;
+    } else {
+      // Move to offset position and write data
+      backing_file.seekp(record->get_offset());
+    }
+    backing_file.write(record->get_data_ptr(), record->get_size());
+  }
+  backing_file.flush();
+}
+
+void Rvm::CommitRecords(const std::list<RedoRecord*>& records) {
+  WriteRecordsToLog(log_path_, records, false);
+  for (RedoRecord* record : records) {
+    committed_logs_.push_back(record);
+  }
 }
 
 
