@@ -491,16 +491,16 @@ trans_t rvm_begin_trans(rvm_t rvm, int numsegs, void** segbases) {
 void rvm_about_to_modify(trans_t tid, void* segbase, int offset, int size) {
   if (size <= 0) {
 #if DEBUG
-    std::cerr << "rvm_about_to_modify(): Negative size inputted" << size  << std::endl;
+    std::cerr << "rvm_about_to_modify(): Negative size inputted " << size  << std::endl;
 #endif
-    return;
+    exit(1);
   }
 
   if (offset < 0) {
 #if DEBUG
-    std::cerr << "rvm_about_to_modify(): Negative offset inputted" << size  << std::endl;
+    std::cerr << "rvm_about_to_modify(): Negative offset inputted " << offset  << std::endl;
 #endif
-    return;
+    exit(1);
   }
 
   std::unordered_map<trans_t, RvmTransaction*>::iterator iter = g_trans_list.find(tid);
