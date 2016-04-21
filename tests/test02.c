@@ -1,3 +1,7 @@
+/*
+ * Test that rvm_map() on a segment already mapped returns -1
+ */
+
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>
@@ -5,7 +9,6 @@
 #include <string.h>
 #include <sys/wait.h>
 
-/* proc1 writes some data, commits it, then exits */
 void proc1() {
   rvm_t rvm;
   char* segs[1] = { 0 };

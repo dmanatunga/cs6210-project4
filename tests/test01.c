@@ -1,3 +1,6 @@
+/*
+ * Test that rvm_destroy() returns immediately and the backing file still exists
+ */
 #include "rvm.h"
 #include <string.h>
 #include <stdio.h>

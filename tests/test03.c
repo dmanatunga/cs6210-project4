@@ -1,3 +1,7 @@
+/* 
+ * Test that rvm_unmap() with invalid segment base fails
+ */
+
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>

@@ -1,3 +1,7 @@
+/* 
+ * Test that rvm_about_to_modify() with offset outside valid range fails
+ */
+
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>

@@ -1,3 +1,7 @@
+/*
+ * Test that rvm_begin_trans() with a segment that is already being modified fails
+ */
+
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>

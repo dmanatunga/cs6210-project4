@@ -1,3 +1,7 @@
+/* 
+ * Test that rvm_commit_trans() with invalid trans_id fails
+ */
+
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>

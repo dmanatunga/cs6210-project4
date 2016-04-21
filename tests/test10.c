@@ -1,3 +1,7 @@
+/* 
+ * Test that rvm_about_to_modify() with a negative size fails
+ */
+
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>

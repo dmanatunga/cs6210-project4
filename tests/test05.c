@@ -1,3 +1,7 @@
+/* 
+ * Test that rvm_begin_trans() with invalid segment fails
+ */
+
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>
