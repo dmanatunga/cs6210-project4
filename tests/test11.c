@@ -1,5 +1,3 @@
-/* basic.c - test that basic persistency works */
-
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>
@@ -10,8 +8,6 @@
 #define TEST_STRING "hello, world"
 #define OFFSET2 1000
 
-
-/* proc1 writes some data, commits it, then exits */
 void proc1() {
   rvm_t rvm;
   trans_t trans = 0;
@@ -25,7 +21,6 @@ void proc1() {
 
   // this should work fine
   rvm_about_to_modify(trans, segs1[0], 50, 10);
-  fprintf(stderr, "PASS: First modify\n");
   // this should exit
   rvm_about_to_modify(trans, segs1[0], 99, 2);
 
@@ -33,13 +28,6 @@ void proc1() {
 
   abort();
 }
-
-
-/* proc2 opens the segments and reads from them */
-void proc2() {
-  exit(0);
-}
-
 
 int main(int argc, char** argv) {
   int pid;
@@ -55,8 +43,6 @@ int main(int argc, char** argv) {
   }
 
   waitpid(pid, NULL, 0);
-
-  proc2();
 
   return 0;
 }

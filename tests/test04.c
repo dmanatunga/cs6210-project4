@@ -1,5 +1,3 @@
-/* basic.c - test that basic persistency works */
-
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>
@@ -10,8 +8,6 @@
 #define TEST_STRING "hello, world"
 #define OFFSET2 1000
 
-
-/* proc1 writes some data, commits it, then exits */
 void proc1() {
   rvm_t rvm;
   trans_t trans;
@@ -26,20 +22,11 @@ void proc1() {
   trans = rvm_begin_trans(rvm, 1, (void**) segs);
 
   if (trans != -1) {
-    fprintf(stderr, "Error: Should be -1\n");
-  } else {
-    fprintf(stderr, "Pass\n");
+    fprintf(stderr, "Error: Double transaction begin\n");
   }
 
   abort();
 }
-
-
-/* proc2 opens the segments and reads from them */
-void proc2() {
-  exit(0);
-}
-
 
 int main(int argc, char** argv) {
   int pid;
@@ -55,8 +42,6 @@ int main(int argc, char** argv) {
   }
 
   waitpid(pid, NULL, 0);
-
-  proc2();
 
   return 0;
 }

@@ -17,27 +17,11 @@ void proc1() {
 
   // this should fail
   if(segs[0] != (char *)-1)
-    fprintf(stderr, "Should return -1\n");
+    fprintf(stderr, "ERROR: Calling map twice Should return -1\n");
   else
-    fprintf(stderr, "Pass\n");
+    fprintf(stderr, "OK\n");
 
   abort();
-}
-
-void proc2() {
-  rvm_t rvm;
-  char* segs[1];
-
-  rvm = rvm_init("rvm_segments");
-  rvm_destroy(rvm, "testseg02");
-  segs[0] = (char*) rvm_map(rvm, "testseg02", 10000);
-
-  rvm_unmap(rvm, segs[0]);
-
-  // this should not fail
-  rvm_destroy(rvm, "testseg02");
-
-  return;
 }
 
 int main(int argc, char** argv) {
@@ -54,8 +38,6 @@ int main(int argc, char** argv) {
   }
 
   waitpid(pid, NULL, 0);
-
-  proc2();
 
   return 0;
 }
