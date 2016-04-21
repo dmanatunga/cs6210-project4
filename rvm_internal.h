@@ -5,6 +5,7 @@
 #include <list>
 #include <unordered_map>
 #include <sys/stat.h>
+#include <atomic>
 
 #define DEBUG 1
 #if !DEBUG
@@ -14,8 +15,8 @@
 
 class RvmTransaction;
 
-std::unordered_map<trans_t, RvmTransaction*> g_trans_list;
-static trans_t g_trans_id = 0;
+std::unordered_map<trans_t, RvmTransaction*> g_trans_map;
+static std::atomic<trans_t> g_trans_id (0);
 
 class RvmSegment {
  public:
@@ -133,6 +134,10 @@ class RedoRecord {
 class RvmTransaction {
  public:
   RvmTransaction(trans_t tid, Rvm* rvm) : id_(tid), rvm_(rvm) {};
+  RvmTransaction(trans_t tid, Rvm* rvm, const std::list<RedoRecord*>& records)
+          : id_(tid), rvm_(rvm), redo_records_(records) {
+  };
+
 
   void AboutToModify(void* segbase, size_t offset, size_t size);
   void Commit();
@@ -140,11 +145,24 @@ class RvmTransaction {
   void AddSegment(RvmSegment* segment);
   void RemoveSegments();
 
+  trans_t get_id() const {
+    return id_;
+  }
+
+  const std::list<RedoRecord*>& get_redo_records() const {
+    return redo_records_;
+  }
+
+  Rvm* get_rvm() const {
+    return rvm_;
+  }
+
  private:
   trans_t id_;
   Rvm* rvm_;
   std::unordered_map<void*, RvmSegment*> base_to_segment_map_;
   std::list<UndoRecord*> undo_records_;
+  std::list<RedoRecord*> redo_records_;
 };
 
 class Rvm {
@@ -156,11 +174,12 @@ class Rvm {
   void UnmapSegment(void* segbase);
   void DestroySegment(std::string segname);
   trans_t BeginTransaction(int numsegs, void** segbases);
+  void CommitTransaction(RvmTransaction* rvm_trans);
+  void AbortTransaction(RvmTransaction* rvm_trans);
   void TruncateLog();
+
   std::list<RedoRecord*> GetRedoRecordsForSegment(RvmSegment* segment);
-  void WriteRecordsToLog(const std::string& path, const std::list<RedoRecord*>& records, bool overwrite);
-  void WriteRecordToLog(const std::string& path, const RedoRecord* record, bool overwrite);
-  void ApplyRecordsToBackingFile(const std::string& segname, const std::list<RedoRecord*>& records);
+
 
   inline std::string construct_segment_path(std::string segname) {
     return directory_ + "/" + "seg_" + segname + ".rvm";
@@ -170,15 +189,13 @@ class Rvm {
     return log_path_;
   }
 
-  void CommitRecords(const std::list<RedoRecord*>& records);
-
  private:
   std::string directory_;
   std::string log_path_;
   std::string tmp_log_path_;
   std::unordered_map<std::string, RvmSegment*> name_to_segment_map_;
   std::unordered_map<void*, RvmSegment*> base_to_segment_map_;
-  std::list<RedoRecord*> committed_logs_;
+  std::list<RvmTransaction*> committed_transactions_;
 
   inline std::string construct_log_path() {
     return directory_ + "/" + "redo_log.rvm";
@@ -193,7 +210,15 @@ class Rvm {
     return (stat (name.c_str(), &buffer) == 0);
   }
 
+  trans_t get_next_transaction_id() {
+    return g_trans_id.fetch_add(1);
+  }
+
+  RvmTransaction* ParseTransaction(std::ifstream& log_file);
   RedoRecord* ParseRedoRecord(std::ifstream& log_file);
+  void WriteTransactionToLog(std::ofstream& log_file, RvmTransaction* rvm_trans);
+  void WriteRecordsToLog(std::ofstream& log_file, const std::list<RedoRecord*>& records);
+  void ApplyRecordsToBackingFile(const std::string& segname, const std::list<RedoRecord*>& records);
 
 };
 
