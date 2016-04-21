@@ -674,6 +674,7 @@ void rvm_commit_trans(trans_t tid) {
 #if DEBUG
     std::cerr << "rvm_commit_trans(): Invalid Transaction " << tid << std::endl;
 #endif
+    exit(1);
   }
 }
 
@@ -686,6 +687,7 @@ void rvm_abort_trans(trans_t tid) {
 #if DEBUG
     std::cerr << "rvm_abort_trans(): Invalid Transaction " << tid << std::endl;
 #endif
+    exit(1);
   }
 }
 

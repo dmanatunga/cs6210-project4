@@ -1,5 +1,5 @@
 /* 
- * Test that rvm_about_to_modify() with invalid trans_id fails
+ * Test that rvm_abort_trans() with invalid trans_id fails
  */
 
 #include "rvm.h"
@@ -14,17 +14,24 @@
 
 void proc1() {
   rvm_t rvm;
-  trans_t trans = 0;
+  trans_t trans;
   char* segs[1];
 
   rvm = rvm_init("rvm_segments");
   rvm_destroy(rvm, "testseg");
   segs[0] = (char*) rvm_map(rvm, "testseg", 10000);
 
-  // this should exit
-  rvm_about_to_modify(trans, segs[0], 0, 100);
+  trans = rvm_begin_trans(rvm, 1, (void**) segs);
 
-  fprintf(stderr, "ERROR: This should not be printed\n");
+  rvm_about_to_modify(trans, segs[0], 0, 100);
+  sprintf(segs[0], TEST_STRING);
+
+  rvm_about_to_modify(trans, segs[0], OFFSET2, 100);
+  sprintf(segs[0] + OFFSET2, TEST_STRING);
+
+  rvm_abort_trans(100);
+
+  fprintf(stderr, "ERROR: Wrong abort transaction id\n");
 
   abort();
 }

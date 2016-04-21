@@ -1,3 +1,7 @@
+/* 
+ * Test that rvm_unmap() with invalid segment base fails
+ */
+
 #include "rvm.h"
 #include <unistd.h>
 #include <stdio.h>
@@ -5,20 +9,7 @@
 #include <string.h>
 #include <sys/wait.h>
 
-/* proc1 writes some data, commits it, then exits */
 void proc1() {
-  rvm_t rvm;
-  char* segs[1];
-
-  rvm = rvm_init("rvm_segments");
-  rvm_destroy(rvm, "testseg03");
-  segs[0] = (char*) rvm_map(rvm, "testseg03", 10000);
-
-  rvm_unmap(rvm, segs[0]);
-  abort();
-}
-
-void proc2() {
   rvm_t rvm;
   char* segs[1] = { 0 };
 
@@ -27,6 +18,7 @@ void proc2() {
   // this should fail
   rvm_unmap(rvm, segs[0]);
 
+  printf("ERROR: Unmap() before mapping\n");
   segs[0] = (char*) rvm_map(rvm, "testseg03", 10000);
 
   return;
@@ -46,8 +38,6 @@ int main(int argc, char** argv) {
   }
 
   waitpid(pid, NULL, 0);
-
-  proc2();
 
   return 0;
 }

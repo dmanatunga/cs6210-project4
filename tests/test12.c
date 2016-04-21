@@ -1,4 +1,6 @@
-/* basic.c - test that basic persistency works */
+/* 
+ * Test that rvm_commit_trans() with invalid trans_id fails
+ */
 
 #include "rvm.h"
 #include <unistd.h>
@@ -10,8 +12,6 @@
 #define TEST_STRING "hello, world"
 #define OFFSET2 1000
 
-
-/* proc1 writes some data, commits it, then exits */
 void proc1() {
   rvm_t rvm;
   trans_t trans;
@@ -20,7 +20,6 @@ void proc1() {
   rvm = rvm_init("rvm_segments");
   rvm_destroy(rvm, "testseg");
   segs[0] = (char*) rvm_map(rvm, "testseg", 10000);
-
 
   trans = rvm_begin_trans(rvm, 1, (void**) segs);
 
@@ -37,29 +36,6 @@ void proc1() {
   abort();
 }
 
-
-/* proc2 opens the segments and reads from them */
-void proc2() {
-  char* segs[1];
-  rvm_t rvm;
-
-  rvm = rvm_init("rvm_segments");
-
-  segs[0] = (char*) rvm_map(rvm, "testseg", 10000);
-  if (strcmp(segs[0], TEST_STRING)) {
-    printf("ERROR: first hello not present\n");
-    exit(2);
-  }
-  if (strcmp(segs[0] + OFFSET2, TEST_STRING)) {
-    printf("ERROR: second hello not present\n");
-    exit(2);
-  }
-
-  printf("OK\n");
-  exit(0);
-}
-
-
 int main(int argc, char** argv) {
   int pid;
 
@@ -74,8 +50,6 @@ int main(int argc, char** argv) {
   }
 
   waitpid(pid, NULL, 0);
-
-  proc2();
 
   return 0;
 }

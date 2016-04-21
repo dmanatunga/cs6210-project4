@@ -1,5 +1,5 @@
 /*
- * Test that rvm_begin_trans() with a segment that is already being modified fails
+ * Test that truncate_log() works
  */
 
 #include "rvm.h"
@@ -8,10 +8,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 #define TEST_STRING "hello, world"
 #define OFFSET2 1000
 
+
+/* proc1 writes some data, commits it, then exits */
 void proc1() {
   rvm_t rvm;
   trans_t trans;
@@ -23,10 +26,27 @@ void proc1() {
 
 
   trans = rvm_begin_trans(rvm, 1, (void**) segs);
-  trans = rvm_begin_trans(rvm, 1, (void**) segs);
 
-  if (trans != -1) {
-    fprintf(stderr, "Error: Double transaction begin\n");
+  rvm_about_to_modify(trans, segs[0], 0, 100);
+  sprintf(segs[0], TEST_STRING);
+
+  rvm_about_to_modify(trans, segs[0], OFFSET2, 100);
+  sprintf(segs[0] + OFFSET2, TEST_STRING);
+
+  rvm_commit_trans(trans);
+
+  rvm_truncate_log(rvm);
+
+  struct stat buffer;
+
+  if (stat("rvm_segments/redo_log.rvm", &buffer) == 0) {
+    if (buffer.st_size == 0) {
+      printf("OK\n");
+    } else {
+      fprintf(stderr, "ERROR: truncate failed\n");
+    }
+  } else {
+    fprintf(stderr, "ERROR: truncate failed\n");
   }
 
   abort();
