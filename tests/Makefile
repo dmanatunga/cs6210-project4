@@ -31,7 +31,7 @@ EXEC = abort \
        test18 \
        test19
 
-CXX_EXEC = test15 test20
+CXX_EXEC = test15 test20 test21
 
 all: $(EXEC) $(CXX_EXEC)
 
