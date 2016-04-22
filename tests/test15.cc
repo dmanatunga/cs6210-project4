@@ -16,6 +16,7 @@
 class node {
 public:
   node() { val = -1; prev = NULL; next = NULL; }
+  ~node() { delete node_string; }
 
   void set_val(int newval) { val = newval; }
   int get_val(void) { return val; }
@@ -94,7 +95,7 @@ public:
     return tail_node->get_next();
   }
 
-  void delete_node(trans_t trans, node *nodep)
+  void unlink_node(trans_t trans, node *nodep)
   {
     assert(nodep != root);
 
@@ -107,10 +108,14 @@ public:
       nodep->get_next()->set_prev(nodep->get_prev());
     }
 
+    num_nodes--;
+  }
+
+  void delete_node(node *nodep)
+  {
     const char *seg_del = nodep->get_node_string().c_str();
     rvm_unmap(rvm, nodep); 
     rvm_destroy(rvm, seg_del);
-    num_nodes--;
   }
 
   void get_node_list(int val, int& num, node**& del_list)
@@ -157,6 +162,18 @@ public:
   void complete_deletion(trans_t trans)
   {
     rvm_commit_trans(trans);
+  }
+
+  ~linked_list() {
+    node *curr_node = root, *next_node;
+
+    while (curr_node->get_next() != NULL) {
+      next_node = curr_node->get_next();
+      delete_node(curr_node);
+      curr_node = next_node;
+    }
+
+    delete_node(curr_node);
   }
 
 private:
@@ -210,10 +227,18 @@ int main(int argc, char** argv) {
 
   trans_t trans = list->prepare_deletion(num, del_list);
   for (int i = 0; i < num; i++)
-    list->delete_node(trans, del_list[i]);
-
+    list->unlink_node(trans, del_list[i]);
   list->complete_deletion(trans);
 
+  // free the nodes
+  for (int i = 0; i < num; i++) {
+    list->delete_node(del_list[i]);
+  }
+
   std::cout << "Final list size is " << list->get_num_nodes() << std::endl;
+
+  std::cout << "Cleaning up..." << std::endl;
+
+  delete list;
   return 0;
 }
