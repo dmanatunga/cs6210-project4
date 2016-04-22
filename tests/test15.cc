@@ -11,7 +11,7 @@
 #include <assert.h>
 #include <time.h>
 
-#define NUM_NODES 200000
+#define NUM_NODES 2000
 
 class node {
 public:
@@ -110,8 +110,6 @@ public:
       rvm_about_to_modify(trans, nodep->get_next(), 0, sizeof(node));
       nodep->get_next()->set_prev(nodep->get_prev());
     }
-
-    num_nodes--;
   }
 
   void delete_node(node *nodep)
@@ -119,6 +117,8 @@ public:
     const char *seg_del = nodep->get_node_string().c_str();
     rvm_unmap(rvm, nodep); 
     rvm_destroy(rvm, seg_del);
+
+    num_nodes--;
   }
 
   void get_node_list(int val, int& num, node**& del_list)
@@ -233,14 +233,10 @@ int main(int argc, char** argv) {
   std::cout << "Found " << num << " nodes whose val is greater than "
             << del_val << std::endl;
 
+  // transaction without any abort
   trans_t trans = list->prepare_deletion(num, del_list);
   for (int i = 0; i < num; i++) {
     list->unlink_node(trans, del_list[i]);
-    if (rand() % 100 == 0) {
-      std::cerr << "Aborting..." << std::endl;
-      list->abort_deletion(trans);
-      break;
-    }
   }
   list->complete_deletion(trans);
 
@@ -249,12 +245,42 @@ int main(int argc, char** argv) {
     list->delete_node(del_list[i]);
   }
 
+  std::cout << "Current list size is " << list->get_num_nodes() << std::endl;
+  //free(del_list);
+
+  // transaction with abort
+  del_val = rand() % del_val;
+  std::cout << "Deleting all nodes whose val is greater than " << del_val << std::endl;
+
+  list->get_node_list(del_val, num, del_list);
+  std::cout << "Found " << num << " nodes whose val is greater than "
+            << del_val << std::endl;
+
+  bool abort = false;
+  trans = list->prepare_deletion(num, del_list);
+  for (int i = 0; i < num; i++) {
+    list->unlink_node(trans, del_list[i]);
+    if (rand() % 100 == 0) {
+      abort = true;
+      std::cerr << "Aborting..." << std::endl;
+      list->abort_deletion(trans);
+      break;
+    }
+  }
+  if (!abort) {
+    list->complete_deletion(trans);
+
+    // free the nodes
+    for (int i = 0; i < num; i++) {
+      list->delete_node(del_list[i]);
+    }
+  }
+
   std::cout << "Final list size is " << list->get_num_nodes() << std::endl;
 
   std::cout << "Cleaning up..." << std::endl;
 
   free(del_list);
 
-  delete list;
   return 0;
 }
