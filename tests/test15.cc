@@ -23,9 +23,13 @@ public:
   node* get_next(void) { return next; }
   void set_prev(node* newval) { prev = newval; }
   node* get_prev(void) { return prev; }
+  void set_node_string(std::string name) { node_string = new std::string(name); }
+  std::string get_node_string(void) { return *node_string; }
+
 private:
   node *prev, *next;
   int val;
+  std::string* node_string;
 };
 
 class linked_list {
@@ -52,9 +56,10 @@ public:
   node *create_new_node(void)
   {
     num_nodes++;
-    node *curr_node = (node *) rvm_map(rvm, get_node_string(), sizeof(node));
+    node *curr_node = (node *) rvm_map(rvm, get_node_string().c_str(), sizeof(node));
     curr_node->set_next(NULL);
     curr_node->set_prev(NULL);
+    curr_node->set_node_string(get_node_string());
 
     return curr_node;
   }
@@ -102,8 +107,9 @@ public:
       nodep->get_next()->set_prev(nodep->get_prev());
     }
 
+    const char *seg_del = nodep->get_node_string().c_str();
     rvm_unmap(rvm, nodep); 
-    rvm_destroy(rvm, (const char *)nodep);
+    rvm_destroy(rvm, seg_del);
     num_nodes--;
   }
 
@@ -142,7 +148,7 @@ public:
     // copy next nodes if they are not NULL
     for (int i = 0; i < num; i++) {
       if (del_list[i]->get_next() != NULL)
-	full_del_list[total++] = del_list[i]->get_next();
+        full_del_list[total++] = del_list[i]->get_next();
     }
 
     return rvm_begin_trans(rvm, total, (void **)full_del_list);
@@ -168,10 +174,10 @@ private:
     return curr_node;
   }
 
-  char *get_node_string(void)
+  std::string get_node_string(void)
   {
     std::string node_string = std::string("NODE_") + std::to_string(num_nodes);
-    return strdup(node_string.c_str());
+    return node_string;
   }
 };
 
