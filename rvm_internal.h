@@ -138,6 +138,7 @@ class RvmTransaction {
   RvmTransaction(trans_t tid, Rvm* rvm, const std::list<RedoRecord*>& records)
           : id_(tid), rvm_(rvm), redo_records_(records) {
   };
+  ~RvmTransaction();
 
 
   void AboutToModify(void* segbase, size_t offset, size_t size);
@@ -152,6 +153,10 @@ class RvmTransaction {
 
   const std::list<RedoRecord*>& get_redo_records() const {
     return redo_records_;
+  }
+
+  void clear_redo_records() {
+    redo_records_.clear();
   }
 
   Rvm* get_rvm() const {
@@ -180,7 +185,6 @@ class Rvm {
   void TruncateLog();
 
   std::list<RedoRecord*> GetRedoRecordsForSegment(RvmSegment* segment);
-
 
   inline std::string construct_segment_path(std::string segname) {
     return directory_ + "/" + "seg_" + segname + ".rvm";
@@ -215,7 +219,7 @@ class Rvm {
   RedoRecord* ParseRedoRecord(std::ifstream& log_file);
   void WriteTransactionToLog(std::ofstream& log_file, RvmTransaction* rvm_trans);
   void WriteRecordsToLog(std::ofstream& log_file, const std::list<RedoRecord*>& records);
-  void ApplyRecordsToBackingFile(const std::string& segname, const std::list<RedoRecord*>& records);
+  bool ApplyRecordsToBackingFile(const std::string& segname, const std::list<RedoRecord*>& records);
 
 };
 

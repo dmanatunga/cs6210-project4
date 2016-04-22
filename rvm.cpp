@@ -95,6 +95,18 @@ RvmSegment::~RvmSegment() {
 ///////////////////////////////////////////////////////////////////////////////
 // RvmTransaction functions
 ///////////////////////////////////////////////////////////////////////////////
+RvmTransaction::~RvmTransaction() {
+  for (UndoRecord* record : undo_records_) {
+    delete record;
+  }
+  undo_records_.clear();
+
+  for (RedoRecord* record : redo_records_) {
+    delete record;
+  }
+  redo_records_.clear();
+}
+
 void RvmTransaction::AboutToModify(void* segbase, size_t offset, size_t size) {
   std::unordered_map<void*, RvmSegment*>::iterator iterator = base_to_segment_map_.find(segbase);
   if (iterator == base_to_segment_map_.end()) {
@@ -159,6 +171,7 @@ void RvmTransaction::RemoveSegments() {
     segment->set_owner(nullptr);
   }
 }
+
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -377,16 +390,27 @@ void Rvm::TruncateLog() {
         commit_map[record->get_segment_name()].push_back(record);
       }
     }
+    // Clear the list of redo records
+    rvm_trans->clear_redo_records();
+    delete rvm_trans;
   }
+  committed_transactions_.clear();
 
   // Loop through map and commit logs to backing file
   for (auto& pair : commit_map) {
-    ApplyRecordsToBackingFile(pair.first, pair.second);
-    // Delete the record that has been applied to the backing file
-    pair.second.clear();
+    bool success = ApplyRecordsToBackingFile(pair.first, pair.second);
+    if (!success) {
+      // Logs not successfully applied, so save them
+      for (RedoRecord* record : pair.second) {
+         unbacked_records.push_back(record);
+      }
+    } else {
+      // Successfully applied records, so delete them
+      for (RedoRecord* record : pair.second) {
+        delete record;
+      }
+    }
   }
-
-  committed_transactions_.clear();
 
   std::ofstream::openmode flags = std::ofstream::out | std::ofstream::binary | std::ofstream::trunc;
   std::ofstream log_file(tmp_log_path_, flags);
@@ -657,7 +681,7 @@ void Rvm::WriteRecordsToLog(std::ofstream& log_file, const std::list<RedoRecord*
 }
 
 
-void Rvm::ApplyRecordsToBackingFile(const std::string& segname,
+bool Rvm::ApplyRecordsToBackingFile(const std::string& segname,
                                     const std::list<RedoRecord*>& records) {
 
   std::ofstream backing_file(construct_segment_path(segname), std::ofstream::out | std::ofstream::ate);
@@ -677,8 +701,15 @@ void Rvm::ApplyRecordsToBackingFile(const std::string& segname,
       backing_file.seekp(record->get_offset());
     }
     backing_file.write(record->get_data_ptr(), record->get_size());
+    if (!backing_file.good()) {
+#if DEBUG
+      std::cout << "Rvm::ApplyRecordsToBackingFile(): Error applying changes to backnig file" << std::endl;
+#endif
+      return false;
+    }
   }
   backing_file.flush();
+  return true;
 }
 
 
