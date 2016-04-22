@@ -499,6 +499,8 @@ RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
       RedoRecord* record = new RedoRecord(std::string(name_buf), offset, size);
       log_file.read(record->get_data_ptr(), size);
 
+      delete[] name_buf;
+
       return record;
     }
     case RedoRecord::DESTROY_SEGMENT: {
@@ -514,6 +516,7 @@ RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
       log_file.read(name_buf, sizeof(char) * name_len);
 
       RedoRecord* record = new RedoRecord(RedoRecord::DESTROY_SEGMENT, std::string(name_buf));
+      delete[] name_buf;
       return record;
     }
     default: {
