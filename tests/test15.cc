@@ -116,9 +116,9 @@ public:
     while(curr_node->get_next() != NULL) {
       curr_node = curr_node->get_next();
       if (curr_node->get_val() > val) {
-	num++;
-	del_list = (node **)realloc(del_list, sizeof(node *) * num);
-	del_list[num - 1] = curr_node;
+        num++;
+        del_list = (node **)realloc(del_list, sizeof(node *) * num);
+        del_list[num - 1] = curr_node;
       }
     }
 
