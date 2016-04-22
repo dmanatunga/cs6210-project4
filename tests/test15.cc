@@ -11,12 +11,15 @@
 #include <assert.h>
 #include <time.h>
 
-#define NUM_NODES 200
+#define NUM_NODES 200000
 
 class node {
 public:
   node() { val = -1; prev = NULL; next = NULL; }
-  ~node() { delete node_string; }
+  ~node() {
+    std::cout << "Node deleted" << std::endl;
+    delete node_string;
+  }
 
   void set_val(int newval) { val = newval; }
   int get_val(void) { return val; }
@@ -136,6 +139,11 @@ public:
     return;
   }
 
+  void abort_deletion(trans_t trans)
+  {
+    rvm_abort_trans(trans);
+  }
+
   trans_t prepare_deletion(int num, node **del_list)
   {
     void *full_del_list[num * 3];
@@ -226,8 +234,14 @@ int main(int argc, char** argv) {
             << del_val << std::endl;
 
   trans_t trans = list->prepare_deletion(num, del_list);
-  for (int i = 0; i < num; i++)
+  for (int i = 0; i < num; i++) {
     list->unlink_node(trans, del_list[i]);
+    if (rand() % 100 == 0) {
+      std::cerr << "Aborting..." << std::endl;
+      list->abort_deletion(trans);
+      break;
+    }
+  }
   list->complete_deletion(trans);
 
   // free the nodes
@@ -238,6 +252,8 @@ int main(int argc, char** argv) {
   std::cout << "Final list size is " << list->get_num_nodes() << std::endl;
 
   std::cout << "Cleaning up..." << std::endl;
+
+  free(del_list);
 
   delete list;
   return 0;
