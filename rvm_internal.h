@@ -15,7 +15,8 @@
 
 class RvmTransaction;
 
-std::unordered_map<trans_t, RvmTransaction*> g_trans_map;
+static std::unordered_map<std::string, Rvm*> g_rvm_instances;
+static std::unordered_map<trans_t, RvmTransaction*> g_trans_map;
 static std::atomic<trans_t> g_trans_id (0);
 
 class RvmSegment {
@@ -167,7 +168,7 @@ class RvmTransaction {
 
 class Rvm {
  public:
-  Rvm(const char* directory);
+  Rvm(std::string directory);
   ~Rvm();
 
   void* MapSegment(std::string segname, size_t segsize);
@@ -183,10 +184,6 @@ class Rvm {
 
   inline std::string construct_segment_path(std::string segname) {
     return directory_ + "/" + "seg_" + segname + ".rvm";
-  }
-
-  const std::string& get_log_path() const {
-    return log_path_;
   }
 
  private:

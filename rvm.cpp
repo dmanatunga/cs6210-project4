@@ -101,7 +101,7 @@ void RvmTransaction::AboutToModify(void* segbase, size_t offset, size_t size) {
 #if DEBUG
     std::cerr << "RvmTransaction::AboutToModify(): Invalid Segment Base" << std::endl;
 #endif
-    return;
+    exit(EXIT_FAILURE);
   }
 
   RvmSegment* segment = iterator->second;
@@ -109,7 +109,17 @@ void RvmTransaction::AboutToModify(void* segbase, size_t offset, size_t size) {
 #if DEBUG
     std::cerr << "RvmTransaction::AboutToModify(): offset and size outside of segment region" << std::endl;
 #endif
-    exit(1);
+    exit(EXIT_FAILURE);
+  }
+
+  for (UndoRecord* record : undo_records_) {
+    if ((record->get_segment_base_ptr() == (const char*) segbase) &&
+        (record->get_offset() == offset) &&
+        (record->get_size() == size)) {
+      // If we find a matching UndoRecord already, then no need to
+      // create another undo record
+      return;
+    }
   }
 
   UndoRecord* undo_record = new UndoRecord(segment, offset, size);
@@ -154,7 +164,7 @@ void RvmTransaction::RemoveSegments() {
 ///////////////////////////////////////////////////////////////////////////////
 // Rvm class functions
 ///////////////////////////////////////////////////////////////////////////////
-Rvm::Rvm(const char* directory) : directory_(directory) {
+Rvm::Rvm(std::string directory) : directory_(directory) {
   struct stat st;
   if (stat(directory_.c_str(), &st) == -1) {
 
@@ -182,7 +192,8 @@ Rvm::Rvm(const char* directory) : directory_(directory) {
     while (log_file.good()) {
 
       if (log_file.tellg() == file_size) {
-        return;
+        // Reached end of file
+        break;
       }
 
       RvmTransaction* rvm_trans = ParseTransaction(log_file);
@@ -206,7 +217,6 @@ Rvm::Rvm(const char* directory) : directory_(directory) {
         return;
       }
     }
-    std::cout << log_file.tellg() << std::endl;
     log_file.close();
   }
 }
@@ -254,7 +264,7 @@ void Rvm::UnmapSegment(void* segbase) {
 #if DEBUG
     std::cerr << "Rvm::UnmapSegment(): Segment " << segbase << " does not exist" << std::endl;
 #endif
-    return;
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -592,8 +602,6 @@ void Rvm::ApplyRecordsToBackingFile(const std::string& segname,
 }
 
 
-
-
 ///////////////////////////////////////////////////////////////////////////////
 // Library functions (passthrough calls)
 ///////////////////////////////////////////////////////////////////////////////
@@ -603,9 +611,17 @@ rvm_t rvm_init(const char* directory) {
   }
 
   // TODO: Check if rvm instance for directory has already been made
-  // If this is case, should throw error and exit.
-  Rvm* rvm  = new Rvm(directory);
-  return rvm;
+  std::string dir(directory);
+  std::unordered_map<std::string, Rvm*>::iterator it = g_rvm_instances.find(dir);
+  if (it == g_rvm_instances.end()) {
+    // If this is case, should throw error and exit.
+    Rvm* rvm  = new Rvm(dir);
+    g_rvm_instances[dir] = rvm;
+    return rvm;
+  } else {
+    return it->second;
+  }
+
 }
 
 void* rvm_map(rvm_t rvm, const char* segname, int size_to_create) {
@@ -643,14 +659,14 @@ void rvm_about_to_modify(trans_t tid, void* segbase, int offset, int size) {
 #if DEBUG
     std::cerr << "rvm_about_to_modify(): Negative size inputted" << size  << std::endl;
 #endif
-    return;
+    exit(EXIT_FAILURE);
   }
 
   if (offset < 0) {
 #if DEBUG
     std::cerr << "rvm_about_to_modify(): Negative offset inputted" << size  << std::endl;
 #endif
-    return;
+    exit(EXIT_FAILURE);
   }
 
   std::unordered_map<trans_t, RvmTransaction*>::iterator iter = g_trans_map.find(tid);
@@ -661,7 +677,7 @@ void rvm_about_to_modify(trans_t tid, void* segbase, int offset, int size) {
 #if DEBUG
     std::cerr << "rvm_about_to_modify(): Invalid Transaction " << tid << std::endl;
 #endif
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -674,7 +690,7 @@ void rvm_commit_trans(trans_t tid) {
 #if DEBUG
     std::cerr << "rvm_commit_trans(): Invalid Transaction " << tid << std::endl;
 #endif
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -687,7 +703,7 @@ void rvm_abort_trans(trans_t tid) {
 #if DEBUG
     std::cerr << "rvm_abort_trans(): Invalid Transaction " << tid << std::endl;
 #endif
-    exit(1);
+    exit(EXIT_FAILURE);
   }
 }
 
