@@ -252,8 +252,14 @@ void Rvm::UnmapSegment(void* segbase) {
   std::unordered_map<void*, RvmSegment*>::iterator iterator = base_to_segment_map_.find(segbase);
   if (iterator != base_to_segment_map_.end()) {
     RvmSegment* rvm_segment = iterator->second;
-
     assert(segbase == rvm_segment->get_base_ptr());
+
+    if (rvm_segment->has_owner()) {
+#if DEBUG
+      std::cerr << "Rvm::UnmapSegment(): Segment " << segbase << " being used by Transaction " << rvm_segment->get_owner()->get_id() << std::endl;
+#endif
+      exit(EXIT_FAILURE);
+    }
 
     // Erase the segment from the mapping structures
     base_to_segment_map_.erase(iterator);
