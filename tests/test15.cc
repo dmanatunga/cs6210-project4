@@ -11,7 +11,7 @@
 #include <assert.h>
 #include <time.h>
 
-#define NUM_NODES 200000
+#define NUM_NODES 2000
 
 class node {
 public:
