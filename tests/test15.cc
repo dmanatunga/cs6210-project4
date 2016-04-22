@@ -212,6 +212,8 @@ int main(int argc, char** argv) {
   for (int i = 0; i < num; i++)
     list->delete_node(trans, del_list[i]);
 
+  list->complete_deletion(trans);
+
   std::cout << "Final list size is " << list->get_num_nodes() << std::endl;
   return 0;
 }
