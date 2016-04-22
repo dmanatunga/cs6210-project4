@@ -388,8 +388,8 @@ void Rvm::TruncateLog() {
 
   committed_transactions_.clear();
 
-    std::ofstream::openmode flags = std::ofstream::out | std::ofstream::binary | std::ofstream::trunc;
-    std::ofstream log_file(tmp_log_path_, flags);
+  std::ofstream::openmode flags = std::ofstream::out | std::ofstream::binary | std::ofstream::trunc;
+  std::ofstream log_file(tmp_log_path_, flags);
   if (!unbacked_records.empty()) {
     RvmTransaction* rvm_trans = new RvmTransaction(get_next_transaction_id(), this, unbacked_records);
     WriteTransactionToLog(log_file, rvm_trans);
@@ -425,6 +425,13 @@ RvmTransaction* Rvm::ParseTransaction(std::ifstream& log_file) {
   log_file.read((char*)&trans_id, sizeof(trans_t));
   log_file.read((char*)&num_records, sizeof(size_t));
 
+  if (!log_file.good()) {
+#if DEBUG
+    std::cout << "Rvm::ParseTransaction(): Transaction parse failed" << std::endl;
+#endif
+    return nullptr;
+  }
+
   std::list<RedoRecord*> records;
   for (size_t i = 0; i < num_records; i++) {
     RedoRecord* record = ParseRedoRecord(log_file);
@@ -444,6 +451,18 @@ RvmTransaction* Rvm::ParseTransaction(std::ifstream& log_file) {
   log_file.read((char*)&tmp_num_records, sizeof(size_t));
   log_file.read((char*)&tmp_id, sizeof(trans_t));
 
+  if (!log_file.good()) {
+#if DEBUG
+    std::cout << "Rvm::ParseTransaction(): Transaction parse failed" << std::endl;
+#endif
+    // If error occurred during parsing, delete
+    // any created records and return null ptr
+    for (RedoRecord* redo_record : records) {
+      delete redo_record;
+    }
+    return nullptr;
+  }
+
   if ((trans_id == tmp_id) && (tmp_num_records == num_records)
       && (num_records == records.size())) {
     RvmTransaction* rvm_trans = new RvmTransaction(trans_id, this, records);
@@ -451,7 +470,7 @@ RvmTransaction* Rvm::ParseTransaction(std::ifstream& log_file) {
   }
 
 #if DEBUG
-  std::cout << "Rvm::ParseTransaction(): Error parsing transaction" << std::endl;
+  std::cout << "Rvm::ParseTransaction(): Transaction check failed" << std::endl;
 #endif
 
   // If error occurred during parsing, delete
@@ -465,6 +484,7 @@ RvmTransaction* Rvm::ParseTransaction(std::ifstream& log_file) {
 
 RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
   // RedoRecord Format
+
   // <size_t-bytes = N> : Length of segment name
   // <N-bytes> : Characters making up segment
   // <size_t-bytes> : Offset
@@ -474,6 +494,12 @@ RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
   // Redo-log file exists, so read it in
   int type;
   log_file.read((char*)&type, sizeof(int));
+  if (!log_file.good()) {
+#if DEBUG
+    std::cout << "Rvm::ParseRedoRecord(): Parse record failed" << std::endl;
+#endif
+    return nullptr;
+  }
 
   switch (type) {
     case RedoRecord::REDO_RECORD: {
@@ -482,11 +508,26 @@ RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
       // Read Name length
       log_file.read(len_buf, sizeof(size_t));
       size_t name_len = *((size_t*)len_buf);
+      if (!log_file.good()) {
+#if DEBUG
+        std::cout << "Rvm::ParseRedoRecord(): Parse record failed" << std::endl;
+#endif
+        return nullptr;
+      }
+
 
       // Read name
       char* name_buf = new char[name_len + 1]; // +1 so that last byte will be string null-terminator
       name_buf[name_len] = 0;
       log_file.read(name_buf, sizeof(char) * name_len);
+      if (!log_file.good()) {
+#if DEBUG
+        std::cout << "Rvm::ParseRedoRecord(): Parse record failed" << std::endl;
+#endif
+        delete[] name_buf;
+        return nullptr;
+      }
+
 
       // Read offset
       log_file.read(len_buf, sizeof(size_t));
@@ -496,8 +537,25 @@ RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
       log_file.read(len_buf, sizeof(size_t));
       size_t size = *((size_t*)len_buf);
 
+      if (!log_file.good()) {
+#if DEBUG
+        std::cout << "Rvm::ParseRedoRecord(): Parse record failed" << std::endl;
+#endif
+        delete[] name_buf;
+        return nullptr;
+      }
+
       RedoRecord* record = new RedoRecord(std::string(name_buf), offset, size);
       log_file.read(record->get_data_ptr(), size);
+
+      if (!log_file.good()) {
+#if DEBUG
+        std::cout << "Rvm::ParseRedoRecord(): Parse record failed" << std::endl;
+#endif
+        delete[] name_buf;
+        delete record;
+        return nullptr;
+      }
 
       delete[] name_buf;
 
@@ -509,11 +567,24 @@ RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
       // Read Name length
       log_file.read(len_buf, sizeof(size_t));
       size_t name_len = *((size_t*)len_buf);
+      if (!log_file.good()) {
+#if DEBUG
+        std::cout << "Rvm::ParseRedoRecord(): Parse record failed" << std::endl;
+#endif
+        return nullptr;
+      }
 
       // Read name
       char* name_buf = new char[name_len + 1](); // +1 so that last byte will be string null-terminator
       name_buf[name_len] = 0;
       log_file.read(name_buf, sizeof(char) * name_len);
+      if (!log_file.good()) {
+#if DEBUG
+        std::cout << "Rvm::ParseRedoRecord(): Parse record failed" << std::endl;
+#endif
+        delete[] name_buf;
+        return nullptr;
+      }
 
       RedoRecord* record = new RedoRecord(RedoRecord::DESTROY_SEGMENT, std::string(name_buf));
       delete[] name_buf;
@@ -521,7 +592,7 @@ RedoRecord* Rvm::ParseRedoRecord(std::ifstream& log_file) {
     }
     default: {
 #if DEBUG
-      std::cerr << "Rvm::ParseRedoRecord: Invalid Type " << (int)type << std::endl;
+      std::cerr << "Rvm::ParseRedoRecord: Invalid Type " << type << std::endl;
 #endif
       return nullptr;
 
@@ -619,15 +690,16 @@ rvm_t rvm_init(const char* directory) {
     return nullptr;
   }
 
-  // TODO: Check if rvm instance for directory has already been made
+  // Check if rvm instance for directory has already been made
   std::string dir(directory);
   std::unordered_map<std::string, Rvm*>::iterator it = g_rvm_instances.find(dir);
   if (it == g_rvm_instances.end()) {
-    // If this is case, should throw error and exit.
+    // Create new instance
     Rvm* rvm  = new Rvm(dir);
     g_rvm_instances[dir] = rvm;
     return rvm;
   } else {
+    // Return existing instance
     return it->second;
   }
 
