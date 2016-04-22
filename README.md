@@ -58,15 +58,15 @@ to the appropriate backing file, then the commit stage would have poor performan
 writing to random sectors in the hard drive. By writing these changes to the log file instead, 
 we have better performance through sequential writes.
 
-The log file is written in the following format:
-<transaction-1><transaction-2>...<transaction-N>
+The log file is written in the following format:  
+\<transaction-1>\<transaction-2>...\<transaction-N>: Committed Transactions
 
-A transaction is specified in the following format:
-<int bytes>: Transaction ID
-<size_t bytes>: Number of Records = N
-<record-1><record-2>...<record-N>
-<size_t bytes>: Number of Records = N
-<int bytes>: Transaction ID 
+A transaction is specified in the following format:  
+\<int bytes>: Transaction ID  
+\<size_t bytes>: Number of Records = N  
+\<record-1>\<record-2>...\<record-N>: Record of changes made in transaction  
+\<size_t bytes>: Number of Records = N  
+\<int bytes>: Transaction ID    
 
 Note, the transaction data begins with a transaction ID followed by the number of records and also
  ends with the number of records followed by the transaction ID. This is done to serve as an 
@@ -81,18 +81,18 @@ go through the log file and destroy any records related to the segment. Instead,
 a destroy record, the library can know that any time this record is encountered, any previous 
 segment changes should be ignored. 
 
-A REDO_RECORD is specified in the following format:
-<int bytes>: REDO_RECORD type code
-<size_t bytes>: Length of segment name = N
-<N bytes>: Characters making up segment name
-<size_t bytes>: Region Offset in segment 
-<size_t bytes>: Size of Changed Region = M
-<M bytes>: Bytes making up region of segment that was changed
+A REDO_RECORD is specified in the following format:  
+\<int bytes>: REDO_RECORD type code  
+\<size_t bytes>: Length of segment name = N  
+\<N bytes>: Characters making up segment name  
+\<size_t bytes>: Region Offset in segment  
+\<size_t bytes>: Size of Changed Region = M  
+\<M bytes>: Bytes making up region of segment that was changed  
 
-A DESTROY_RECORD is specified in the following format:
-<int bytes>: DESTROY_RECORD type code
-<size_t bytes>: Length of segment name = N
-<N bytes>: Characters making up segment name
+A DESTROY_RECORD is specified in the following format:  
+\<int bytes>: DESTROY_RECORD type code  
+\<size_t bytes>: Length of segment name = N  
+\<N bytes>: Characters making up segment name  
 
 ### Backing File
 The backing file is a simple binary file representing a recoverable virtual memory segment.
