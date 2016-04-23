@@ -68,6 +68,11 @@ public:
     return curr_node;
   }
 
+  void truncate_log(void)
+  {
+    rvm_truncate_log(rvm);
+  }
+
   int get_num_nodes(void)
   {
     return num_nodes;
@@ -279,18 +284,23 @@ int main(int argc, char** argv) {
   // free all remaining nodes
   del_val = 0;
   std::cout << "Deleting all remaining nodes " << std::endl;
+
   list->get_node_list(del_val, num, del_list);
+
   std::cout << "Found " << num << " nodes whose val is greater than "
             << del_val << std::endl;
+
   trans = list->prepare_deletion(num, del_list);
   for (int i = 0; i < num; i++) {
     list->unlink_node(trans, del_list[i]);
   }
+  list->complete_deletion(trans);
   // free the nodes
   for (int i = 0; i < num; i++) {
     list->delete_node(del_list[i]);
   }
-  list->complete_deletion(trans);
+
+  list->truncate_log();
 
   std::cout << "Final list size is " << list->get_num_nodes() << std::endl;
 
