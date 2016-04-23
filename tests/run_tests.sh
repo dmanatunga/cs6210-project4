@@ -2,7 +2,7 @@
 
 make
 
-for i in `seq 15`; do
+for i in `seq 24`; do
   printf -v i "%02d" $i
   printf -v bench test${i}
   echo "Running $bench"
