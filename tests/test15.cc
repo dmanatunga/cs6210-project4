@@ -276,6 +276,22 @@ int main(int argc, char** argv) {
     }
   }
 
+  // free all remaining nodes
+  del_val = 0;
+  std::cout << "Deleting all remaining nodes " << std::endl;
+  list->get_node_list(del_val, num, del_list);
+  std::cout << "Found " << num << " nodes whose val is greater than "
+            << del_val << std::endl;
+  trans = list->prepare_deletion(num, del_list);
+  for (int i = 0; i < num; i++) {
+    list->unlink_node(trans, del_list[i]);
+  }
+  // free the nodes
+  for (int i = 0; i < num; i++) {
+    list->delete_node(del_list[i]);
+  }
+  list->complete_deletion(trans);
+
   std::cout << "Final list size is " << list->get_num_nodes() << std::endl;
 
   std::cout << "Cleaning up..." << std::endl;
