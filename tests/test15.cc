@@ -45,6 +45,22 @@ public:
     root = create_new_node();
   }
 
+  void verify_nodes(void)
+  {
+    node *curr_node = root;
+    int node_count = 1;
+
+    std::cout << "Verify list integrity...";
+
+    while(curr_node->get_next() != NULL) {
+      curr_node = curr_node->get_next();
+      node_count++;
+    }
+
+    assert(node_count == num_nodes);
+    std::cout << " Passed." << std::endl;
+  }
+
   void print_nodes(void)
   {
     node *curr_node = root;
@@ -250,6 +266,8 @@ int main(int argc, char** argv) {
     list->delete_node(del_list[i]);
   }
 
+  list->verify_nodes();
+
   std::cout << "Current list size is " << list->get_num_nodes() << std::endl;
   //free(del_list);
 
@@ -281,8 +299,10 @@ int main(int argc, char** argv) {
     }
   }
 
+  list->verify_nodes();
+
   // free all remaining nodes
-  del_val = 0;
+  del_val = -1;
   std::cout << "Deleting all remaining nodes " << std::endl;
 
   list->get_node_list(del_val, num, del_list);
@@ -299,6 +319,8 @@ int main(int argc, char** argv) {
   for (int i = 0; i < num; i++) {
     list->delete_node(del_list[i]);
   }
+
+  list->verify_nodes();
 
   list->truncate_log();
 
