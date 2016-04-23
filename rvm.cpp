@@ -398,16 +398,18 @@ void Rvm::TruncateLog() {
 
   // Loop through map and commit logs to backing file
   for (auto& pair : commit_map) {
-    bool success = ApplyRecordsToBackingFile(pair.first, pair.second);
-    if (!success) {
-      // Logs not successfully applied, so save them
-      for (RedoRecord* record : pair.second) {
-         unbacked_records.push_back(record);
-      }
-    } else {
-      // Successfully applied records, so delete them
-      for (RedoRecord* record : pair.second) {
-        delete record;
+    if (!pair.second.empty()) {
+      bool success = ApplyRecordsToBackingFile(pair.first, pair.second);
+      if (!success) {
+        // Logs not successfully applied, so save them
+        for (RedoRecord* record : pair.second) {
+          unbacked_records.push_back(record);
+        }
+      } else {
+        // Successfully applied records, so delete them
+        for (RedoRecord* record : pair.second) {
+          delete record;
+        }
       }
     }
   }
